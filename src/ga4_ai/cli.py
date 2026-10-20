@@ -70,8 +70,48 @@ def find_token_file(profile: str = "default") -> Path:
     return GA4_TOKEN
 
 
-def clean_property_id(prop: str) -> str:
-    """Ensure property ID has 'properties/' prefix."""
+def find_config_file(profile: str = "default") -> Path:
+    """Find config file for specific profile."""
+    if profile and profile != "default":
+        return GA4_DIR / f"config_{profile}.json"
+    return GA4_DIR / "config.json"
+
+
+def load_config(profile: str = "default") -> Dict[str, Any]:
+    """Load configuration for profile."""
+    cfg_file = find_config_file(profile)
+    if cfg_file.exists():
+        try:
+            with open(cfg_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_config(data: Dict[str, Any], profile: str = "default"):
+    """Save configuration for profile."""
+    GA4_DIR.mkdir(parents=True, exist_ok=True)
+    cfg_file = find_config_file(profile)
+    with open(cfg_file, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def clean_property_id(prop: Optional[str], profile: str = "default", require: bool = True) -> str:
+    """Ensure property ID has 'properties/' prefix, falling back to config if omitted."""
+    if not prop:
+        cfg = load_config(profile)
+        prop = cfg.get("property_id")
+        if not prop and profile != "default":
+            def_cfg = load_config("default")
+            prop = def_cfg.get("property_id")
+
+    if not prop:
+        if require:
+            print("[ERROR] Property ID is required (--property <ID> or set default via 'ga4 config --property <ID>')", file=sys.stderr)
+            sys.exit(1)
+        return ""
+
     prop = str(prop).strip()
     if prop.startswith("properties/"):
         return prop
@@ -195,11 +235,28 @@ def cmd_properties(args):
     print_table(headers, rows, args.json, args.csv)
 
 
+def cmd_config(args):
+    prof = getattr(args, 'profile', 'default')
+    cfg = load_config(prof)
+    updated = False
+
+    if args.property:
+        cfg["property_id"] = clean_property_id(args.property, prof, require=False)
+        updated = True
+
+    if updated:
+        save_config(cfg, prof)
+        print(f"[+] GA4 configuration updated for profile '{prof}'!")
+
+    print(f"=== GA4 Config (Profile: '{prof}') ===")
+    print(f"Default Property: {cfg.get('property_id', '<NOT SET>')}")
+
+
 def cmd_query(args):
     """Run a custom report using Google Analytics Data API."""
     prof = getattr(args, 'profile', 'default')
     data_client, _ = get_services(prof)
-    property_id = clean_property_id(args.property)
+    property_id = clean_property_id(args.property, prof)
 
     metrics = [{'name': m.strip()} for m in args.metrics.split(',') if m.strip()]
     dimensions = [{'name': d.strip()} for d in args.dimensions.split(',') if d.strip()] if args.dimensions else []
@@ -237,7 +294,7 @@ def cmd_realtime(args):
     """Run a real-time activity report."""
     prof = getattr(args, 'profile', 'default')
     data_client, _ = get_services(prof)
-    property_id = clean_property_id(args.property)
+    property_id = clean_property_id(args.property, prof)
 
     body = {
         'metrics': [{'name': 'activeUsers'}],
@@ -265,7 +322,7 @@ def cmd_channels(args):
     """Preset report: Traffic & Conversions by Channel Grouping."""
     prof = getattr(args, 'profile', 'default')
     data_client, _ = get_services(prof)
-    property_id = clean_property_id(args.property)
+    property_id = clean_property_id(args.property, prof)
     days = args.days or 30
 
     body = {
@@ -296,7 +353,7 @@ def cmd_events(args):
     """Preset report: Top events by volume and users."""
     prof = getattr(args, 'profile', 'default')
     data_client, _ = get_services(prof)
-    property_id = clean_property_id(args.property)
+    property_id = clean_property_id(args.property, prof)
     days = args.days or 30
 
     body = {
@@ -326,7 +383,7 @@ def cmd_landing_pages(args):
     """Preset report: Top landing pages."""
     prof = getattr(args, 'profile', 'default')
     data_client, _ = get_services(prof)
-    property_id = clean_property_id(args.property)
+    property_id = clean_property_id(args.property, prof)
     days = args.days or 30
 
     body = {
@@ -392,6 +449,8 @@ def main():
     # Common
     sub.add_parser("auth", help="Run one-time OAuth authentication for GA4", parents=[common_parser])
     sub.add_parser("status", help="Check GA4 credentials and token status", parents=[common_parser])
+    p_cfg = sub.add_parser("config", help="Set or view default GA4 property configuration", parents=[common_parser])
+    p_cfg.add_argument("--property", help="Set default GA4 Property ID (e.g. 171288152)")
 
     # Properties
     p_props = sub.add_parser("properties", help="List all accessible GA4 accounts and Property IDs", parents=[common_parser])
@@ -400,14 +459,14 @@ def main():
 
     # Realtime
     p_rt = sub.add_parser("realtime", help="Run real-time activity report", parents=[common_parser])
-    p_rt.add_argument("--property", required=True, help="GA4 Property ID (e.g. 123456789)")
+    p_rt.add_argument("--property", help="GA4 Property ID (e.g. 123456789)")
     p_rt.add_argument("--limit", type=int, default=25, help="Number of rows")
     p_rt.add_argument("--json", action="store_true", help="Output JSON")
     p_rt.add_argument("--csv", action="store_true", help="Output CSV")
 
     # Query
     p_q = sub.add_parser("query", help="Run custom report (metrics, dimensions)", parents=[common_parser])
-    p_q.add_argument("--property", required=True, help="GA4 Property ID")
+    p_q.add_argument("--property", help="GA4 Property ID")
     p_q.add_argument("--metrics", required=True, help="Comma-separated metrics (e.g. 'activeUsers,sessions,conversions')")
     p_q.add_argument("--dimensions", help="Comma-separated dimensions (e.g. 'sessionDefaultChannelGroup,date')")
     p_q.add_argument("--days", type=int, default=30, help="Days back from today (default: 30)")
@@ -419,20 +478,20 @@ def main():
 
     # Presets
     p_chan = sub.add_parser("channels", help="Report by Channel Grouping (Sessions, Users, Conversions)", parents=[common_parser])
-    p_chan.add_argument("--property", required=True, help="GA4 Property ID")
+    p_chan.add_argument("--property", help="GA4 Property ID")
     p_chan.add_argument("--days", type=int, default=30, help="Days back (default: 30)")
     p_chan.add_argument("--json", action="store_true", help="Output JSON")
     p_chan.add_argument("--csv", action="store_true", help="Output CSV")
 
     p_ev = sub.add_parser("events", help="Report top events (Counts, Users, Value)", parents=[common_parser])
-    p_ev.add_argument("--property", required=True, help="GA4 Property ID")
+    p_ev.add_argument("--property", help="GA4 Property ID")
     p_ev.add_argument("--days", type=int, default=30, help="Days back (default: 30)")
     p_ev.add_argument("--limit", type=int, default=50, help="Max rows")
     p_ev.add_argument("--json", action="store_true", help="Output JSON")
     p_ev.add_argument("--csv", action="store_true", help="Output CSV")
 
     p_lp = sub.add_parser("landing-pages", help="Report top landing pages", parents=[common_parser])
-    p_lp.add_argument("--property", required=True, help="GA4 Property ID")
+    p_lp.add_argument("--property", help="GA4 Property ID")
     p_lp.add_argument("--days", type=int, default=30, help="Days back (default: 30)")
     p_lp.add_argument("--limit", type=int, default=50, help="Max rows")
     p_lp.add_argument("--json", action="store_true", help="Output JSON")
@@ -451,6 +510,8 @@ def main():
             print(f"[+] GA4 Authentication successful for profile '{prof}'!")
         elif args.subcommand == "status":
             cmd_status(args)
+        elif args.subcommand == "config":
+            cmd_config(args)
         elif args.subcommand == "properties":
             cmd_properties(args)
         elif args.subcommand == "query":
