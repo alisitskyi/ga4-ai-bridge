@@ -58,9 +58,13 @@ In your Google Cloud project (e.g. `ai-editor-al`):
 
 Run in your terminal:
 ```powershell
+# Authenticate default personal account:
 ga4 auth
+
+# Or authenticate a second work/client Google account:
+ga4 auth --profile work
 ```
-*(Confirms access via browser; token is saved to `~/.ga4/token.json`).*
+*(Confirms access via browser; tokens are saved to `~/.ga4/token.json` and `~/.ga4/token_work.json`).*
 
 ---
 
@@ -130,6 +134,11 @@ Add to your project's `.claude/settings.json`:
   ]
 }
 ```
+
+Prompt examples for AI assistants:
+- *"Check current live website visitors using `ga4 realtime --property 397834888`."*
+- *"Show traffic channel performance for SellerLogic over the last 30 days using `ga4 channels --property 318114159 --profile work`."*
+- *"List top 10 landing pages and sessions with `ga4 landing-pages --days 14 --limit 10`."*
 
 ### Cursor IDE
 Copy [`templates/.cursorrules`](templates/.cursorrules) to your project root.
