@@ -1,0 +1,14 @@
+# Cline / Roo Code Rules for Google Analytics 4 (GA4)
+
+When asked about website analytics, conversion tracking, traffic channels, or user behavior:
+- Use the `ga4` CLI tool in the terminal to query GA4 directly.
+- Find property IDs via `ga4 properties`.
+- Use `--json` to inspect and parse raw data.
+
+Key Commands:
+- List Properties: `ga4 properties`
+- Channels Breakdown: `ga4 channels --property <ID> [--days 30]`
+- Top Events: `ga4 events --property <ID> [--days 14]`
+- Landing Pages: `ga4 landing-pages --property <ID> [--days 30]`
+- Realtime users: `ga4 realtime --property <ID>`
+- Custom Query: `ga4 query --property <ID> --metrics "activeUsers,conversions" [--dimensions "date"] [--json]`
