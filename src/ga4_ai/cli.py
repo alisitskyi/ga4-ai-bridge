@@ -2,7 +2,7 @@
 """
 Global Google Analytics 4 (GA4) CLI Tool (ga4)
 Enables any AI assistant or developer in VS Code across all projects to:
-- Authenticate once globally
+- Authenticate once globally with multiple account profiles (--profile)
 - List all accessible GA4 accounts and properties
 - Query custom metrics and dimensions
 - Run real-time activity reports
@@ -62,6 +62,11 @@ def find_token_file(profile: str = "default") -> Path:
     """Find token file for specific profile."""
     if profile and profile != "default":
         return GA4_DIR / f"token_{profile}.json"
+    if GA4_TOKEN.exists():
+        return GA4_TOKEN
+    local_token = Path.cwd() / '.secrets' / 'token.json'
+    if local_token.exists():
+        return local_token
     return GA4_TOKEN
 
 
@@ -150,7 +155,6 @@ def print_table(headers: List[str], rows: List[List[str]], out_json: bool = Fals
         print("[!] No data returned for this query.", file=sys.stderr)
         return
 
-    # Compute column widths
     widths = [len(h) for h in headers]
     for row in rows:
         for idx, val in enumerate(row):
@@ -168,8 +172,9 @@ def print_table(headers: List[str], rows: List[List[str]], out_json: bool = Fals
 
 def cmd_properties(args):
     """List all GA4 accounts and properties accessible to the user."""
-    _, admin = get_services()
-    print("Fetching accessible Google Analytics accounts...", file=sys.stderr)
+    prof = getattr(args, 'profile', 'default')
+    _, admin = get_services(prof)
+    print(f"Fetching accessible Google Analytics accounts (profile: '{prof}')...", file=sys.stderr)
 
     try:
         accounts_res = admin.accountSummaries().list().execute()
@@ -192,13 +197,13 @@ def cmd_properties(args):
 
 def cmd_query(args):
     """Run a custom report using Google Analytics Data API."""
-    data_client, _ = get_services()
+    prof = getattr(args, 'profile', 'default')
+    data_client, _ = get_services(prof)
     property_id = clean_property_id(args.property)
 
     metrics = [{'name': m.strip()} for m in args.metrics.split(',') if m.strip()]
     dimensions = [{'name': d.strip()} for d in args.dimensions.split(',') if d.strip()] if args.dimensions else []
 
-    # Calculate date range
     if args.start_date and args.end_date:
         date_ranges = [{'startDate': args.start_date, 'endDate': args.end_date}]
     else:
@@ -230,7 +235,8 @@ def cmd_query(args):
 
 def cmd_realtime(args):
     """Run a real-time activity report."""
-    data_client, _ = get_services()
+    prof = getattr(args, 'profile', 'default')
+    data_client, _ = get_services(prof)
     property_id = clean_property_id(args.property)
 
     body = {
@@ -251,13 +257,14 @@ def cmd_realtime(args):
                    [mv.get('value', '') for mv in row.get('metricValues', [])]
         rows.append(row_vals)
 
-    print(f"=== GA4 Real-time Report ({property_id}) ===", file=sys.stderr)
+    print(f"=== GA4 Real-time Report ({property_id}) [Profile: '{prof}'] ===", file=sys.stderr)
     print_table(headers, rows, args.json, args.csv)
 
 
 def cmd_channels(args):
     """Preset report: Traffic & Conversions by Channel Grouping."""
-    data_client, _ = get_services()
+    prof = getattr(args, 'profile', 'default')
+    data_client, _ = get_services(prof)
     property_id = clean_property_id(args.property)
     days = args.days or 30
 
@@ -281,13 +288,14 @@ def cmd_channels(args):
         m = [mv['value'] for mv in row['metricValues']]
         rows.append([dim] + m)
 
-    print(f"=== Channel Report (Last {days} days) - {property_id} ===", file=sys.stderr)
+    print(f"=== Channel Report (Last {days} days) - {property_id} [Profile: '{prof}'] ===", file=sys.stderr)
     print_table(headers, rows, args.json, args.csv)
 
 
 def cmd_events(args):
     """Preset report: Top events by volume and users."""
-    data_client, _ = get_services()
+    prof = getattr(args, 'profile', 'default')
+    data_client, _ = get_services(prof)
     property_id = clean_property_id(args.property)
     days = args.days or 30
 
@@ -310,13 +318,14 @@ def cmd_events(args):
         m = [mv['value'] for mv in row['metricValues']]
         rows.append([dim] + m)
 
-    print(f"=== Top Events (Last {days} days) - {property_id} ===", file=sys.stderr)
+    print(f"=== Top Events (Last {days} days) - {property_id} [Profile: '{prof}'] ===", file=sys.stderr)
     print_table(headers, rows, args.json, args.csv)
 
 
 def cmd_landing_pages(args):
     """Preset report: Top landing pages."""
-    data_client, _ = get_services()
+    prof = getattr(args, 'profile', 'default')
+    data_client, _ = get_services(prof)
     property_id = clean_property_id(args.property)
     days = args.days or 30
 
@@ -339,59 +348,65 @@ def cmd_landing_pages(args):
         m = [mv['value'] for mv in row['metricValues']]
         rows.append([dim] + m)
 
-    print(f"=== Landing Pages (Last {days} days) - {property_id} ===", file=sys.stderr)
+    print(f"=== Landing Pages (Last {days} days) - {property_id} [Profile: '{prof}'] ===", file=sys.stderr)
     print_table(headers, rows, args.json, args.csv)
 
 
 def cmd_status(args):
     """Check credentials and token validity for GA4."""
+    prof = getattr(args, 'profile', 'default')
     creds_file = find_credentials_file()
-    print("=== GA4 CLI Status ===")
+    token_file = find_token_file(prof)
+    print(f"=== GA4 CLI Status (Profile: '{prof}') ===")
     print(f"Credentials location: {creds_file} (Exists: {creds_file.exists()})")
-    print(f"Token location:       {GA4_TOKEN} (Exists: {GA4_TOKEN.exists()})")
+    print(f"Token location:       {token_file} (Exists: {token_file.exists()})")
 
     if not creds_file.exists():
         print("[-] Status: Missing credentials.json. Please put it in ~/.ga4/credentials.json")
-    elif not GA4_TOKEN.exists():
-        print("[!] Status: credentials.json is present! Please run 'ga4 auth' to authorize.")
+    elif not token_file.exists():
+        print(f"[!] Status: credentials.json present! Run 'ga4 auth --profile {prof}' to authorize.")
     else:
         try:
-            creds = Credentials.from_authorized_user_file(str(GA4_TOKEN), SCOPES)
+            creds = Credentials.from_authorized_user_file(str(token_file), SCOPES)
             if creds and creds.valid:
-                print("[+] Status: GA4 Authentication is VALID and READY!")
+                print(f"[+] Status: GA4 Authentication is VALID and READY for profile '{prof}'!")
             elif creds and creds.expired and creds.refresh_token:
-                print("[*] Status: Token expired, but will refresh automatically on next run.")
+                print(f"[*] Status: Token for profile '{prof}' expired, will refresh automatically.")
             else:
-                print("[!] Status: Token invalid, please run 'ga4 auth'.")
+                print(f"[!] Status: Token invalid, please run 'ga4 auth --profile {prof}'.")
         except Exception as e:
             print(f"[-] Status: Error verifying token: {e}")
 
 
 def main():
+    common_parser = argparse.ArgumentParser(add_help=False)
+    common_parser.add_argument("--profile", default="default", help="Google account profile (e.g. 'work', 'personal')")
+
     parser = argparse.ArgumentParser(
         prog="ga4",
-        description="Global Google Analytics 4 (GA4) CLI for AI assistants and developers."
+        description="Global Google Analytics 4 (GA4) CLI for AI assistants and developers.",
+        parents=[common_parser]
     )
     sub = parser.add_subparsers(dest="subcommand", help="Command to run")
 
     # Common
-    sub.add_parser("auth", help="Run one-time OAuth authentication for GA4")
-    sub.add_parser("status", help="Check GA4 credentials and token status")
+    sub.add_parser("auth", help="Run one-time OAuth authentication for GA4", parents=[common_parser])
+    sub.add_parser("status", help="Check GA4 credentials and token status", parents=[common_parser])
 
     # Properties
-    p_props = sub.add_parser("properties", help="List all accessible GA4 accounts and Property IDs")
+    p_props = sub.add_parser("properties", help="List all accessible GA4 accounts and Property IDs", parents=[common_parser])
     p_props.add_argument("--json", action="store_true", help="Output JSON")
     p_props.add_argument("--csv", action="store_true", help="Output CSV")
 
     # Realtime
-    p_rt = sub.add_parser("realtime", help="Run real-time activity report")
+    p_rt = sub.add_parser("realtime", help="Run real-time activity report", parents=[common_parser])
     p_rt.add_argument("--property", required=True, help="GA4 Property ID (e.g. 123456789)")
     p_rt.add_argument("--limit", type=int, default=25, help="Number of rows")
     p_rt.add_argument("--json", action="store_true", help="Output JSON")
     p_rt.add_argument("--csv", action="store_true", help="Output CSV")
 
     # Query
-    p_q = sub.add_parser("query", help="Run custom report (metrics, dimensions)")
+    p_q = sub.add_parser("query", help="Run custom report (metrics, dimensions)", parents=[common_parser])
     p_q.add_argument("--property", required=True, help="GA4 Property ID")
     p_q.add_argument("--metrics", required=True, help="Comma-separated metrics (e.g. 'activeUsers,sessions,conversions')")
     p_q.add_argument("--dimensions", help="Comma-separated dimensions (e.g. 'sessionDefaultChannelGroup,date')")
@@ -403,20 +418,20 @@ def main():
     p_q.add_argument("--csv", action="store_true", help="Output CSV")
 
     # Presets
-    p_chan = sub.add_parser("channels", help="Report by Channel Grouping (Sessions, Users, Conversions)")
+    p_chan = sub.add_parser("channels", help="Report by Channel Grouping (Sessions, Users, Conversions)", parents=[common_parser])
     p_chan.add_argument("--property", required=True, help="GA4 Property ID")
     p_chan.add_argument("--days", type=int, default=30, help="Days back (default: 30)")
     p_chan.add_argument("--json", action="store_true", help="Output JSON")
     p_chan.add_argument("--csv", action="store_true", help="Output CSV")
 
-    p_ev = sub.add_parser("events", help="Report top events (Counts, Users, Value)")
+    p_ev = sub.add_parser("events", help="Report top events (Counts, Users, Value)", parents=[common_parser])
     p_ev.add_argument("--property", required=True, help="GA4 Property ID")
     p_ev.add_argument("--days", type=int, default=30, help="Days back (default: 30)")
     p_ev.add_argument("--limit", type=int, default=50, help="Max rows")
     p_ev.add_argument("--json", action="store_true", help="Output JSON")
     p_ev.add_argument("--csv", action="store_true", help="Output CSV")
 
-    p_lp = sub.add_parser("landing-pages", help="Report top landing pages")
+    p_lp = sub.add_parser("landing-pages", help="Report top landing pages", parents=[common_parser])
     p_lp.add_argument("--property", required=True, help="GA4 Property ID")
     p_lp.add_argument("--days", type=int, default=30, help="Days back (default: 30)")
     p_lp.add_argument("--limit", type=int, default=50, help="Max rows")
@@ -430,9 +445,10 @@ def main():
         sys.exit(0)
 
     try:
+        prof = getattr(args, 'profile', 'default')
         if args.subcommand == "auth":
-            get_credentials()
-            print("[+] GA4 Authentication successful!")
+            get_credentials(prof)
+            print(f"[+] GA4 Authentication successful for profile '{prof}'!")
         elif args.subcommand == "status":
             cmd_status(args)
         elif args.subcommand == "properties":
