@@ -58,6 +58,13 @@ def find_credentials_file() -> Path:
     return GA4_CREDS
 
 
+def find_token_file(profile: str = "default") -> Path:
+    """Find token file for specific profile."""
+    if profile and profile != "default":
+        return GA4_DIR / f"token_{profile}.json"
+    return GA4_TOKEN
+
+
 def clean_property_id(prop: str) -> str:
     """Ensure property ID has 'properties/' prefix."""
     prop = str(prop).strip()
@@ -66,10 +73,11 @@ def clean_property_id(prop: str) -> str:
     return f"properties/{prop}"
 
 
-def get_credentials() -> Any:
+def get_credentials(profile: str = "default") -> Any:
     """Authenticate via OAuth Desktop App or Service Account."""
     GA4_DIR.mkdir(parents=True, exist_ok=True)
     creds_file = find_credentials_file()
+    token_file = find_token_file(profile)
 
     if not creds_file.exists():
         print(f"\n[ERROR] Credentials file not found!", file=sys.stderr)
@@ -90,35 +98,35 @@ def get_credentials() -> Any:
         )
 
     creds = None
-    if GA4_TOKEN.exists():
+    if token_file.exists():
         try:
-            creds = Credentials.from_authorized_user_file(str(GA4_TOKEN), SCOPES)
+            creds = Credentials.from_authorized_user_file(str(token_file), SCOPES)
         except Exception:
             creds = None
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            print("[*] Refreshing expired token...", file=sys.stderr)
+            print(f"[*] Refreshing expired token (profile: {profile})...", file=sys.stderr)
             try:
                 creds.refresh(Request())
             except Exception:
                 creds = None
 
         if not creds:
-            print("[*] Launching browser for Google Analytics OAuth login...", file=sys.stderr)
+            print(f"[*] Launching browser for Google Analytics login (profile: {profile})...", file=sys.stderr)
             flow = InstalledAppFlow.from_client_secrets_file(str(creds_file), SCOPES)
             creds = flow.run_local_server(port=0)
 
-        with open(GA4_TOKEN, 'w', encoding='utf-8') as f:
+        with open(token_file, 'w', encoding='utf-8') as f:
             f.write(creds.to_json())
-        print(f"[+] GA4 token saved to {GA4_TOKEN}", file=sys.stderr)
+        print(f"[+] GA4 token for profile '{profile}' saved to {token_file}", file=sys.stderr)
 
     return creds
 
 
-def get_services():
+def get_services(profile: str = "default"):
     """Return GA4 Data API and Admin API clients."""
-    creds = get_credentials()
+    creds = get_credentials(profile)
     data_client = build('analyticsdata', 'v1beta', credentials=creds)
     admin_client = build('analyticsadmin', 'v1beta', credentials=creds)
     return data_client, admin_client
