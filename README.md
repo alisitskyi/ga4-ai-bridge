@@ -26,14 +26,14 @@ With `ga4-ai-bridge`:
 
 **Windows (PowerShell):**
 ```powershell
-git clone https://github.com/<your-username>/ga4-ai-bridge.git
+git clone https://github.com/alisitskyi/ga4-ai-bridge.git
 cd ga4-ai-bridge
 .\install.ps1
 ```
 
 **macOS / Linux:**
 ```bash
-git clone https://github.com/<your-username>/ga4-ai-bridge.git
+git clone https://github.com/alisitskyi/ga4-ai-bridge.git
 cd ga4-ai-bridge
 chmod +x install.sh
 ./install.sh
