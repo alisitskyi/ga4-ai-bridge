@@ -137,7 +137,7 @@ Add to your project's `.claude/settings.json`:
 
 Prompt examples for AI assistants:
 - *"Check current live website visitors using `ga4 realtime --property 397834888`."*
-- *"Show traffic channel performance for SellerLogic over the last 30 days using `ga4 channels --property 318114159 --profile work`."*
+- *"Show traffic channel performance for SELLERLOGIC over the last 30 days using `ga4 channels --property 318114159 --profile work`."*
 - *"List top 10 landing pages and sessions with `ga4 landing-pages --days 14 --limit 10`."*
 
 ### Cursor IDE
