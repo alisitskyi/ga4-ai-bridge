@@ -437,7 +437,7 @@ def cmd_status(args):
 
 def main():
     common_parser = argparse.ArgumentParser(add_help=False)
-    common_parser.add_argument("--profile", default="default", help="Google account profile (e.g. 'work', 'personal')")
+    common_parser.add_argument("--profile", default=argparse.SUPPRESS, help="Google account profile (e.g. 'work', 'personal')")
 
     parser = argparse.ArgumentParser(
         prog="ga4",
