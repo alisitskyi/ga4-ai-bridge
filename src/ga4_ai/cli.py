@@ -118,7 +118,7 @@ def clean_property_id(prop: Optional[str], profile: str = "default", require: bo
     return f"properties/{prop}"
 
 
-def get_credentials(profile: str = "default") -> Any:
+def get_credentials(profile: str = "default", allow_browser: bool = False) -> Any:
     """Authenticate via OAuth Desktop App or Service Account."""
     GA4_DIR.mkdir(parents=True, exist_ok=True)
     creds_file = find_credentials_file()
@@ -154,10 +154,16 @@ def get_credentials(profile: str = "default") -> Any:
             print(f"[*] Refreshing expired token (profile: {profile})...", file=sys.stderr)
             try:
                 creds.refresh(Request())
-            except Exception:
+            except Exception as e:
+                print(f"[!] Silent token refresh failed: {e}", file=sys.stderr)
                 creds = None
 
         if not creds:
+            if not allow_browser:
+                print(f"\n[ERROR] GA4 OAuth token for profile '{profile}' has expired or is missing!", file=sys.stderr)
+                print(f"To re-authorize, run this command in your PowerShell terminal:\n  ga4 auth --profile {profile}\n", file=sys.stderr)
+                sys.exit(1)
+
             print(f"[*] Launching browser for Google Analytics login (profile: {profile})...", file=sys.stderr)
             flow = InstalledAppFlow.from_client_secrets_file(str(creds_file), SCOPES)
             creds = flow.run_local_server(port=0)
@@ -169,9 +175,9 @@ def get_credentials(profile: str = "default") -> Any:
     return creds
 
 
-def get_services(profile: str = "default"):
+def get_services(profile: str = "default", allow_browser: bool = False):
     """Return GA4 Data API and Admin API clients."""
-    creds = get_credentials(profile)
+    creds = get_credentials(profile, allow_browser=allow_browser)
     data_client = build('analyticsdata', 'v1beta', credentials=creds)
     admin_client = build('analyticsadmin', 'v1beta', credentials=creds)
     return data_client, admin_client
@@ -506,7 +512,7 @@ def main():
     try:
         prof = getattr(args, 'profile', 'default')
         if args.subcommand == "auth":
-            get_credentials(prof)
+            get_credentials(prof, allow_browser=True)
             print(f"[+] GA4 Authentication successful for profile '{prof}'!")
         elif args.subcommand == "status":
             cmd_status(args)
