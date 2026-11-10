@@ -148,6 +148,14 @@ Copy [`templates/.clinerules`](templates/.clinerules) to your project root.
 
 ---
 
+## 🔮 Roadmap & Alternative Integrations
+
+- **Official Google Analytics MCP Server:**  
+  [`googleanalytics/google-analytics-mcp`](https://github.com/googleanalytics/google-analytics-mcp) — An experimental Model Context Protocol (MCP) server maintained by the Google Analytics team.  
+  *Potential future use case:* Direct in-chat administration via Admin API (managing Key Events, creating Custom Dimensions, viewing Google Ads links, and adding property annotations) alongside our CLI reporting workflows.
+
+---
+
 ## 📄 License
 
 MIT License. Free to use and distribute. See [LICENSE](LICENSE) for details.
